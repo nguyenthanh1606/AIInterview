@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Send, Loader2, Bot, User } from 'lucide-react';
+import { Send, Loader2, Bot, User, Mic, Square } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { generateInterviewSummary } from '@/ai/flows/post-interview-summary';
+import { textToSpeech } from '@/ai/flows/text-to-speech';
+import { transcribeAudio } from '@/ai/flows/transcribe-audio';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -43,6 +45,15 @@ export default function InterviewPage() {
   const [isFinishing, setIsFinishing] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  
+  // Voice state
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+  const [audioSrc, setAudioSrc] = useState<string | null>(null);
+  const mediaRecorder = useRef<MediaRecorder | null>(null);
+  const audioChunks = useRef<Blob[]>([]);
+  const audioPlayerRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     const storedConfig = localStorage.getItem('interviewConfig');
@@ -50,20 +61,23 @@ export default function InterviewPage() {
       router.replace('/');
       return;
     }
-    const parsedConfig = JSON.parse(storedConfig);
+    const parsedConfig: InterviewConfig = JSON.parse(storedConfig);
     setConfig(parsedConfig);
 
-    setMessages([
-      {
-        role: 'ai',
-        content: `Hello! I'll be your interviewer today. We're interviewing for the ${parsedConfig.jobRole} position. Let's get started.`,
-      },
-    ]);
+    const startInterview = async () => {
+        setMessages([
+            {
+                role: 'ai',
+                content: `Hello! I'll be your interviewer today. We're interviewing for the ${parsedConfig.jobRole} position. Let's get started.`,
+            },
+        ]);
 
-    setTimeout(() => {
-        addAiMessage(MOCK_QUESTIONS[0]);
-    }, 1000);
-
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        setIsLoading(true);
+        await addAiMessage(MOCK_QUESTIONS[0]);
+        setIsLoading(false);
+    }
+    startInterview();
   }, [router]);
   
   useEffect(() => {
@@ -75,43 +89,58 @@ export default function InterviewPage() {
     }
   }, [messages]);
 
-  const addAiMessage = (content: string) => {
+  const addAiMessage = async (content: string) => {
     setMessages((prev) => [...prev, { role: 'ai', content }]);
+    if (config?.interviewMode === 'voice') {
+        try {
+            setIsAiSpeaking(true);
+            const result = await textToSpeech(content);
+            setAudioSrc(result.media);
+        } catch (error) {
+            console.error("TTS Error:", error);
+            toast({ variant: "destructive", title: "Audio Error", description: "Could not play interview audio." });
+            setIsAiSpeaking(false);
+        }
+    }
+  };
+
+  const askNextQuestion = async () => {
+    setIsLoading(true);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    const nextIndex = currentQuestionIndex + 1;
+    if (nextIndex < MOCK_QUESTIONS.length) {
+      setCurrentQuestionIndex(nextIndex);
+      await addAiMessage(MOCK_QUESTIONS[nextIndex]);
+    }
+    setIsLoading(false);
+  };
+
+  const handleUserAnswer = async (answer: string) => {
+    if (!answer.trim() || isLoading || isFinishing) return;
+    setMessages((prev) => [...prev, { role: 'user', content: answer }]);
+    setUserInput('');
+    if (currentQuestionIndex < MOCK_QUESTIONS.length - 1) {
+      await askNextQuestion();
+    }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userInput.trim() || isLoading || isFinishing || currentQuestionIndex >= MOCK_QUESTIONS.length) return;
-
-    const newMessages: Message[] = [...messages, { role: 'user', content: userInput }];
-    setMessages(newMessages);
-    setUserInput('');
-    setIsLoading(true);
-
-    setTimeout(() => {
-      const nextIndex = currentQuestionIndex + 1;
-      if (nextIndex < MOCK_QUESTIONS.length) {
-        addAiMessage(MOCK_QUESTIONS[nextIndex]);
-        setCurrentQuestionIndex(nextIndex);
-      }
-      setIsLoading(false);
-    }, 1500);
+    await handleUserAnswer(userInput);
   };
-  
+
   const handleFinishInterview = async () => {
     setIsFinishing(true);
     toast({ title: "Analyzing your interview...", description: "Please wait while we generate your feedback." });
     try {
         const interviewTranscript = messages.map(m => `${m.role}: ${m.content}`).join('\n');
-        
         if (!config) throw new Error("Interview configuration not found.");
-
         const summaryResult = await generateInterviewSummary({
             interviewTranscript,
             jobRole: config.jobRole,
             cvText: config.cvText || undefined,
         });
-
         localStorage.setItem('interviewSummary', JSON.stringify(summaryResult));
         router.push('/summary');
     } catch (error) {
@@ -125,6 +154,60 @@ export default function InterviewPage() {
     }
   }
 
+  // --- Voice methods ---
+  const handleStartRecording = async () => {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder.current = new MediaRecorder(stream);
+            mediaRecorder.current.ondataavailable = (event) => audioChunks.current.push(event.data);
+            mediaRecorder.current.onstop = handleTranscription;
+            audioChunks.current = [];
+            mediaRecorder.current.start();
+            setIsRecording(true);
+        } catch (err) {
+            console.error('Error accessing microphone:', err);
+            toast({ variant: "destructive", title: "Microphone Error", description: "Could not access microphone. Please check permissions." });
+        }
+    }
+  };
+
+  const handleStopRecording = () => {
+    if (mediaRecorder.current) {
+        mediaRecorder.current.stop();
+        mediaRecorder.current.stream.getTracks().forEach(track => track.stop());
+        setIsRecording(false);
+    }
+  };
+  
+  const blobToDataUri = (blob: Blob) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+
+  const handleTranscription = async () => {
+    if (audioChunks.current.length === 0) return;
+    setIsTranscribing(true);
+    const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' });
+    try {
+        const audioDataUri = await blobToDataUri(audioBlob);
+        const { transcript } = await transcribeAudio({ audioDataUri });
+        if (transcript.trim()) {
+            await handleUserAnswer(transcript);
+        } else {
+             toast({ variant: "destructive", title: "Transcription Error", description: "Could not understand audio. Please try again." });
+        }
+    } catch (error) {
+        console.error("Transcription Error:", error);
+        toast({ variant: "destructive", title: "Transcription Error", description: "Failed to transcribe audio." });
+    } finally {
+        setIsTranscribing(false);
+        audioChunks.current = [];
+    }
+  };
+
   if (!config) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
@@ -132,6 +215,9 @@ export default function InterviewPage() {
       </div>
     );
   }
+
+  const interviewIsOver = currentQuestionIndex >= MOCK_QUESTIONS.length - 1 && !isLoading;
+  const voiceControlsDisabled = isLoading || isFinishing || isAiSpeaking || isTranscribing;
 
   return (
     <div className="flex h-screen flex-col bg-muted/20">
@@ -180,11 +266,11 @@ export default function InterviewPage() {
 
       <footer className="sticky bottom-0 z-10 border-t bg-background p-4">
         <div className="mx-auto max-w-3xl">
-          {currentQuestionIndex >= MOCK_QUESTIONS.length -1 && !isLoading && !isFinishing ? (
-             <Button onClick={handleFinishInterview} className="w-full" disabled={isFinishing}>
+          {interviewIsOver && !isFinishing ? (
+             <Button onClick={handleFinishInterview} className="w-full" disabled={isFinishing || voiceControlsDisabled}>
                 {isFinishing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Finishing...</> : 'Finish Interview & Get Feedback'}
             </Button>
-          ) : (
+          ) : config.interviewMode === 'chat' ? (
             <form onSubmit={handleSendMessage} className="flex items-center gap-2">
               <Input
                 value={userInput}
@@ -198,8 +284,29 @@ export default function InterviewPage() {
                 <Send className="h-4 w-4" />
               </Button>
             </form>
+          ) : (
+            <div className="flex flex-col items-center gap-2">
+                {isTranscribing ? (
+                    <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Transcribing your answer...</div>
+                ) : isAiSpeaking ? (
+                    <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Interviewer is speaking...</div>
+                ) : (
+                    <Button 
+                        onClick={isRecording ? handleStopRecording : handleStartRecording} 
+                        size="icon" 
+                        className={cn("w-20 h-20 rounded-full", isRecording && "bg-destructive hover:bg-destructive/90")}
+                        disabled={voiceControlsDisabled}
+                    >
+                        {isRecording ? <Square className="h-8 w-8" /> : <Mic className="h-8 w-8" />}
+                    </Button>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                    {isRecording ? "Click to stop recording" : isTranscribing ? "" : isAiSpeaking ? "" : "Click to record your answer"}
+                </p>
+            </div>
           )}
         </div>
+        <audio ref={audioPlayerRef} src={audioSrc || ''} autoPlay onPlay={() => setIsAiSpeaking(true)} onEnded={() => setIsAiSpeaking(false)} className="hidden" />
       </footer>
     </div>
   );

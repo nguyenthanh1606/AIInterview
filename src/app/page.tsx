@@ -33,7 +33,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { extractCvData } from "@/ai/flows/cv-data-extraction";
 import { cn } from "@/lib/utils";
@@ -73,6 +72,22 @@ export default function Home() {
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsLoading(true);
+    
+    if (values.interviewMode === 'voice') {
+        try {
+            await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (err) {
+            console.error("Microphone permission denied:", err);
+            toast({
+                variant: "destructive",
+                title: "Microphone Access Denied",
+                description: "Please allow microphone access in your browser settings to proceed with a voice interview.",
+            });
+            setIsLoading(false);
+            return;
+        }
+    }
+
     try {
       let cvText: string | null = null;
       if (values.cvFile && values.cvFile.length > 0) {
@@ -198,19 +213,14 @@ export default function Home() {
                             </div>
                           </div>
                           <div
-                             onClick={() => {
-                                field.onChange("voice");
-                                toast({ title: "Coming Soon!", description: "Voice interviews will be available in a future update." });
-                              }}
+                             onClick={() => field.onChange("voice")}
                             className={cn(
-                              "cursor-not-allowed rounded-lg border-2 p-4 transition-all relative overflow-hidden",
-                              field.value === "voice" ? "border-primary bg-primary/10 shadow-lg" : "border-border hover:border-primary/50",
-                              "opacity-50"
+                              "cursor-pointer rounded-lg border-2 p-4 transition-all relative overflow-hidden",
+                              field.value === "voice" ? "border-primary bg-primary/10 shadow-lg" : "border-border hover:border-primary/50"
                             )}
                           >
-                            <Badge variant="secondary" className="absolute top-2 right-2">Coming Soon</Badge>
                              <div className="flex items-center gap-4">
-                              <Mic className="h-8 w-8 text-muted-foreground" />
+                              <Mic className="h-8 w-8 text-primary" />
                               <div>
                                 <h3 className="font-bold">Voice Interview</h3>
                                 <p className="text-sm text-muted-foreground">Speak your answers.</p>
