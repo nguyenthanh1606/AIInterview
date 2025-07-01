@@ -308,7 +308,7 @@ export default function InterviewPage() {
             </div>
           )}
         </div>
-        <audio ref={audioPlayerRef} src={audioSrc || ''} autoPlay onPlay={() => setIsAiSpeaking(true)} onEnded={() => setIsAiSpeaking(false)} className="hidden" />
+        {audioSrc && <audio ref={audioPlayerRef} src={audioSrc} autoPlay onPlay={() => setIsAiSpeaking(true)} onEnded={() => {setIsAiSpeaking(false); setAudioSrc(null);}} className="hidden" />}
       </footer>
     </div>
   );
