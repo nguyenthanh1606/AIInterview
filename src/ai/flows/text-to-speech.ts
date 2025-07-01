@@ -13,10 +13,7 @@ export async function textToSpeech(
   query: string,
   language: string = 'vi'
 ): Promise<{media: string}> {
-  let voiceName = 'Algenib'; // Default English voice
-  if (language === 'vi') {
-    voiceName = 'vi-VN-Standard-D'; // Vietnamese female voice
-  }
+  const voiceName = 'Algenib';
 
   const {media} = await ai.generate({
     model: googleAI.model('gemini-2.5-flash-preview-tts'),
