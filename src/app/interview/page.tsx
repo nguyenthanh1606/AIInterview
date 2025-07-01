@@ -25,14 +25,15 @@ interface InterviewConfig {
   jobRole: string;
   interviewMode: 'chat' | 'voice';
   cvText: string | null;
+  language: 'vi' | 'en';
 }
 
 const MOCK_QUESTIONS = [
-  "Can you tell me a little bit about yourself?",
-  "What are your biggest strengths that you would bring to this role?",
-  "Could you describe one of your biggest weaknesses and how you're working to improve it?",
-  "Where do you see yourself professionally in the next five years?",
-  "Why are you interested in this position and our company?",
+  "Bạn có thể giới thiệu một chút về bản thân không?",
+  "Điểm mạnh lớn nhất của bạn mà bạn sẽ mang lại cho vai trò này là gì?",
+  "Bạn có thể mô tả một trong những điểm yếu lớn nhất của mình và cách bạn đang cải thiện nó không?",
+  "Bạn thấy mình ở đâu trong sự nghiệp trong năm năm tới?",
+  "Tại sao bạn quan tâm đến vị trí này và công ty của chúng tôi?",
 ];
 
 export default function InterviewPage() {
@@ -68,7 +69,7 @@ export default function InterviewPage() {
         setMessages([
             {
                 role: 'ai',
-                content: `Hello! I'll be your interviewer today. We're interviewing for the ${parsedConfig.jobRole} position. Let's get started.`,
+                content: `Xin chào! Tôi sẽ là người phỏng vấn bạn hôm nay. Chúng ta đang phỏng vấn cho vị trí ${parsedConfig.jobRole}. Hãy bắt đầu.`,
             },
         ]);
 
@@ -94,11 +95,11 @@ export default function InterviewPage() {
     if (config?.interviewMode === 'voice') {
         try {
             setIsAiSpeaking(true);
-            const result = await textToSpeech(content);
+            const result = await textToSpeech(content, config.language);
             setAudioSrc(result.media);
         } catch (error) {
             console.error("TTS Error:", error);
-            toast({ variant: "destructive", title: "Audio Error", description: "Could not play interview audio." });
+            toast({ variant: "destructive", title: "Lỗi âm thanh", description: "Không thể phát âm thanh phỏng vấn." });
             setIsAiSpeaking(false);
         }
     }
@@ -132,23 +133,24 @@ export default function InterviewPage() {
 
   const handleFinishInterview = async () => {
     setIsFinishing(true);
-    toast({ title: "Analyzing your interview...", description: "Please wait while we generate your feedback." });
+    toast({ title: "Đang phân tích cuộc phỏng vấn của bạn...", description: "Vui lòng đợi trong khi chúng tôi tạo phản hồi của bạn." });
     try {
         const interviewTranscript = messages.map(m => `${m.role}: ${m.content}`).join('\n');
-        if (!config) throw new Error("Interview configuration not found.");
+        if (!config) throw new Error("Không tìm thấy cấu hình phỏng vấn.");
         const summaryResult = await generateInterviewSummary({
             interviewTranscript,
             jobRole: config.jobRole,
             cvText: config.cvText || undefined,
+            language: 'Vietnamese',
         });
         localStorage.setItem('interviewSummary', JSON.stringify(summaryResult));
         router.push('/summary');
     } catch (error) {
-        console.error("Failed to generate summary:", error);
+        console.error("Không thể tạo tóm tắt:", error);
         toast({
             variant: "destructive",
-            title: "Error",
-            description: "Failed to generate your interview summary. Please try again later.",
+            title: "Lỗi",
+            description: "Không thể tạo tóm tắt phỏng vấn của bạn. Vui lòng thử lại sau.",
         });
         setIsFinishing(false);
     }
@@ -166,8 +168,8 @@ export default function InterviewPage() {
             mediaRecorder.current.start();
             setIsRecording(true);
         } catch (err) {
-            console.error('Error accessing microphone:', err);
-            toast({ variant: "destructive", title: "Microphone Error", description: "Could not access microphone. Please check permissions." });
+            console.error('Lỗi truy cập micro:', err);
+            toast({ variant: "destructive", title: "Lỗi Micro", description: "Không thể truy cập micro. Vui lòng kiểm tra quyền." });
         }
     }
   };
@@ -197,11 +199,11 @@ export default function InterviewPage() {
         if (transcript.trim()) {
             await handleUserAnswer(transcript);
         } else {
-             toast({ variant: "destructive", title: "Transcription Error", description: "Could not understand audio. Please try again." });
+             toast({ variant: "destructive", title: "Lỗi phiên âm", description: "Không thể hiểu âm thanh. Vui lòng thử lại." });
         }
     } catch (error) {
-        console.error("Transcription Error:", error);
-        toast({ variant: "destructive", title: "Transcription Error", description: "Failed to transcribe audio." });
+        console.error("Lỗi phiên âm:", error);
+        toast({ variant: "destructive", title: "Lỗi phiên âm", description: "Không thể phiên âm âm thanh." });
     } finally {
         setIsTranscribing(false);
         audioChunks.current = [];
@@ -224,7 +226,7 @@ export default function InterviewPage() {
       <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background px-4 shadow-sm">
         <Logo />
         <div className="text-sm text-muted-foreground">
-          Role: <span className="font-semibold text-foreground">{config.jobRole}</span>
+          Vai trò: <span className="font-semibold text-foreground">{config.jobRole}</span>
         </div>
       </header>
       
@@ -268,14 +270,14 @@ export default function InterviewPage() {
         <div className="mx-auto max-w-3xl">
           {interviewIsOver && !isFinishing ? (
              <Button onClick={handleFinishInterview} className="w-full" disabled={isFinishing || voiceControlsDisabled}>
-                {isFinishing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Finishing...</> : 'Finish Interview & Get Feedback'}
+                {isFinishing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang hoàn thành...</> : 'Hoàn thành & Nhận phản hồi'}
             </Button>
           ) : config.interviewMode === 'chat' ? (
             <form onSubmit={handleSendMessage} className="flex items-center gap-2">
               <Input
                 value={userInput}
                 onChange={(e) => setUserInput(e.target.value)}
-                placeholder="Type your answer here..."
+                placeholder="Nhập câu trả lời của bạn tại đây..."
                 className="flex-1"
                 disabled={isLoading || isFinishing}
                 autoComplete="off"
@@ -287,9 +289,9 @@ export default function InterviewPage() {
           ) : (
             <div className="flex flex-col items-center gap-2">
                 {isTranscribing ? (
-                    <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Transcribing your answer...</div>
+                    <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Đang phiên âm câu trả lời của bạn...</div>
                 ) : isAiSpeaking ? (
-                    <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Interviewer is speaking...</div>
+                    <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Người phỏng vấn đang nói...</div>
                 ) : (
                     <Button 
                         onClick={isRecording ? handleStopRecording : handleStartRecording} 
@@ -301,7 +303,7 @@ export default function InterviewPage() {
                     </Button>
                 )}
                 <p className="text-xs text-muted-foreground mt-1">
-                    {isRecording ? "Click to stop recording" : isTranscribing ? "" : isAiSpeaking ? "" : "Click to record your answer"}
+                    {isRecording ? "Nhấn để dừng ghi âm" : isTranscribing ? "" : isAiSpeaking ? "" : "Nhấn để ghi âm câu trả lời của bạn"}
                 </p>
             </div>
           )}

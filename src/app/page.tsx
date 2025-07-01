@@ -40,13 +40,13 @@ import { Logo } from "@/components/logo";
 
 
 const formSchema = z.object({
-  jobRole: z.string({ required_error: "Please select a job role." }).min(1, "Please select a job role."),
+  jobRole: z.string({ required_error: "Vui lòng chọn một vai trò công việc." }).min(1, "Vui lòng chọn một vai trò công việc."),
   cvFile: z
     .custom<FileList>()
-    .refine((files) => files?.length > 0, "CV is required.")
-    .refine((files) => files?.[0]?.size <= 5 * 1024 * 1024, `Max file size is 5MB.`)
+    .refine((files) => files?.length > 0, "CV là bắt buộc.")
+    .refine((files) => files?.[0]?.size <= 5 * 1024 * 1024, `Kích thước tệp tối đa là 5MB.`)
     .optional(),
-  interviewMode: z.enum(["chat", "voice"], { required_error: "Please select an interview mode." }),
+  interviewMode: z.enum(["chat", "voice"], { required_error: "Vui lòng chọn chế độ phỏng vấn." }),
 });
 
 const fileToDataUri = (file: File) => new Promise<string>((resolve, reject) => {
@@ -66,7 +66,7 @@ export default function Home() {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      interviewMode: "chat",
+      interviewMode: "voice",
     },
   });
 
@@ -80,8 +80,8 @@ export default function Home() {
             console.error("Microphone permission denied:", err);
             toast({
                 variant: "destructive",
-                title: "Microphone Access Denied",
-                description: "Please allow microphone access in your browser settings to proceed with a voice interview.",
+                title: "Truy cập Microphone bị từ chối",
+                description: "Vui lòng cho phép truy cập microphone trong cài đặt trình duyệt của bạn để tiếp tục với cuộc phỏng vấn bằng giọng nói.",
             });
             setIsLoading(false);
             return;
@@ -101,6 +101,7 @@ export default function Home() {
         jobRole: values.jobRole,
         interviewMode: values.interviewMode,
         cvText,
+        language: 'vi',
       }));
 
       router.push('/interview');
@@ -109,15 +110,15 @@ export default function Home() {
       console.error("Failed to start interview:", error);
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "Failed to process CV or start interview. Please try again.",
+        title: "Lỗi",
+        description: "Không thể xử lý CV hoặc bắt đầu phỏng vấn. Vui lòng thử lại.",
       });
       setIsLoading(false);
     }
   };
   
   const cvFile = form.watch('cvFile');
-  const fileName = cvFile && cvFile.length > 0 ? cvFile[0].name : "No file selected";
+  const fileName = cvFile && cvFile.length > 0 ? cvFile[0].name : "Chưa có tệp nào được chọn";
 
 
   return (
@@ -128,8 +129,8 @@ export default function Home() {
             <div className="mx-auto mb-4">
               <Logo />
             </div>
-            <CardTitle className="text-3xl font-bold">AI Mock Interview</CardTitle>
-            <CardDescription>Prepare for your dream job. No sign up required.</CardDescription>
+            <CardTitle className="text-3xl font-bold">Phỏng vấn thử với AI</CardTitle>
+            <CardDescription>Chuẩn bị cho công việc mơ ước của bạn. Không cần đăng ký.</CardDescription>
           </CardHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -139,19 +140,19 @@ export default function Home() {
                   name="jobRole"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="font-bold text-lg">Select Job Role</FormLabel>
+                      <FormLabel className="font-bold text-lg">Chọn vai trò công việc</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="e.g., Software Engineer" />
+                            <SelectValue placeholder="ví dụ: Kỹ sư phần mềm" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="Software Engineer">Software Engineer</SelectItem>
-                          <SelectItem value="Product Manager">Product Manager</SelectItem>
-                          <SelectItem value="Sales Representative">Sales Representative</SelectItem>
-                          <SelectItem value="Data Scientist">Data Scientist</SelectItem>
-                          <SelectItem value="UX/UI Designer">UX/UI Designer</SelectItem>
+                          <SelectItem value="Kỹ sư phần mềm">Kỹ sư phần mềm</SelectItem>
+                          <SelectItem value="Quản lý sản phẩm">Quản lý sản phẩm</SelectItem>
+                          <SelectItem value="Đại diện bán hàng">Đại diện bán hàng</SelectItem>
+                          <SelectItem value="Nhà khoa học dữ liệu">Nhà khoa học dữ liệu</SelectItem>
+                          <SelectItem value="Nhà thiết kế UX/UI">Nhà thiết kế UX/UI</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -164,16 +165,16 @@ export default function Home() {
                   name="cvFile"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="font-bold text-lg">Upload CV (Optional)</FormLabel>
-                      <FormDescription>Upload your CV to get a personalized interview experience.</FormDescription>
+                      <FormLabel className="font-bold text-lg">Tải lên CV (Tùy chọn)</FormLabel>
+                      <FormDescription>Tải lên CV của bạn để có trải nghiệm phỏng vấn được cá nhân hóa.</FormDescription>
                       <FormControl>
                         <div 
                           className="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted/75 transition-colors"
                           onClick={() => fileInputRef.current?.click()}
                         >
                             <UploadCloud className="w-8 h-8 text-muted-foreground mb-2" />
-                            <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                            <p className="text-xs text-muted-foreground">PDF, DOCX, or TXT (MAX. 5MB)</p>
+                            <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold">Nhấn để tải lên</span> hoặc kéo và thả</p>
+                            <p className="text-xs text-muted-foreground">PDF, DOCX, hoặc TXT (TỐI ĐA 5MB)</p>
                             <Input 
                               type="file"
                               ref={fileInputRef}
@@ -183,7 +184,7 @@ export default function Home() {
                             />
                         </div>
                       </FormControl>
-                      {fileName !== "No file selected" && <div className="text-sm text-muted-foreground pt-2">Selected file: {fileName}</div>}
+                      {fileName !== "Chưa có tệp nào được chọn" && <div className="text-sm text-muted-foreground pt-2">Tệp đã chọn: {fileName}</div>}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -194,7 +195,7 @@ export default function Home() {
                   name="interviewMode"
                   render={({ field }) => (
                     <FormItem className="space-y-4">
-                      <FormLabel className="font-bold text-lg">Choose Interview Mode</FormLabel>
+                      <FormLabel className="font-bold text-lg">Chọn chế độ phỏng vấn</FormLabel>
                       <FormControl>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div
@@ -207,8 +208,8 @@ export default function Home() {
                             <div className="flex items-center gap-4">
                               <MessageCircle className="h-8 w-8 text-primary" />
                               <div>
-                                <h3 className="font-bold">Chat Interview</h3>
-                                <p className="text-sm text-muted-foreground">Type your answers.</p>
+                                <h3 className="font-bold">Phỏng vấn qua tin nhắn</h3>
+                                <p className="text-sm text-muted-foreground">Nhập câu trả lời của bạn.</p>
                               </div>
                             </div>
                           </div>
@@ -222,8 +223,8 @@ export default function Home() {
                              <div className="flex items-center gap-4">
                               <Mic className="h-8 w-8 text-primary" />
                               <div>
-                                <h3 className="font-bold">Voice Interview</h3>
-                                <p className="text-sm text-muted-foreground">Speak your answers.</p>
+                                <h3 className="font-bold">Phỏng vấn qua giọng nói</h3>
+                                <p className="text-sm text-muted-foreground">Nói câu trả lời của bạn.</p>
                               </div>
                             </div>
                           </div>
@@ -239,10 +240,10 @@ export default function Home() {
                   {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      Starting Interview...
+                      Bắt đầu phỏng vấn...
                     </>
                   ) : (
-                    "Start Free Interview"
+                    "Bắt đầu phỏng vấn miễn phí"
                   )}
                 </Button>
               </CardFooter>

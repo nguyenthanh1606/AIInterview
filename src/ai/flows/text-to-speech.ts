@@ -9,14 +9,22 @@ import {ai} from '@/ai/genkit';
 import {googleAI} from '@genkit-ai/googleai';
 import wav from 'wav';
 
-export async function textToSpeech(query: string): Promise<{media: string}> {
+export async function textToSpeech(
+  query: string,
+  language: string = 'vi'
+): Promise<{media: string}> {
+  let voiceName = 'Algenib'; // Default English voice
+  if (language === 'vi') {
+    voiceName = 'vi-VN-Standard-D'; // Vietnamese female voice
+  }
+
   const {media} = await ai.generate({
     model: googleAI.model('gemini-2.5-flash-preview-tts'),
     config: {
       responseModalities: ['AUDIO'],
       speechConfig: {
         voiceConfig: {
-          prebuiltVoiceConfig: {voiceName: 'Algenib'},
+          prebuiltVoiceConfig: {voiceName},
         },
       },
     },
