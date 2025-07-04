@@ -69,6 +69,7 @@ const GenerateInterviewSummaryOutputSchema = z.object({
         userAnswer: z
           .string()
           .describe("The user's original answer to the question."),
+        answerAnalysis: z.string().describe("A brief analysis of the user's answer, explaining what was good and what could be improved regarding its correctness and relevance."),
         suggestedAnswer: z
           .string()
           .describe(
@@ -107,7 +108,9 @@ Based on the interview transcript, the candidate's CV, and the target job role, 
     *   Sự phù hợp với vai trò (Role Fit)
 
     For each competency, provide a numerical rating and a brief justification for your score based on specific examples from the interview.
-3.  **Answer Improvement Suggestions:** For each question the AI asked in the transcript, extract the question and the user's answer. Then, provide a more ideal, well-structured sample answer. This suggested answer should be detailed, professional, and highlight the candidate's skills effectively, serving as a learning example.
+3.  **Answer Improvement Suggestions:** For each question the AI asked in the transcript, extract the question and the user's answer. Then, provide:
+    a. **An analysis of the user's answer:** Briefly critique the user's answer for correctness, completeness, and relevance to the question and job role. Explain what was good and what could be improved.
+    b. **A more ideal, well-structured sample answer:** This suggested answer should be detailed, professional, and highlight the candidate's skills effectively, serving as a learning example.
 
 Interview Transcript:
 {{{interviewTranscript}}}

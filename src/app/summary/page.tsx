@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lightbulb, ThumbsUp, ArrowRight, Home, TrendingUp, MessageSquareQuote } from 'lucide-react';
+import { Lightbulb, ThumbsUp, ArrowRight, Home, TrendingUp, MessageSquareQuote, ClipboardCheck, GraduationCap } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, ResponsiveContainer } from 'recharts';
 
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,7 @@ interface SuggestedAnswer {
     question: string;
     userAnswer: string;
     suggestedAnswer: string;
+    answerAnalysis: string;
 }
 
 interface SummaryData {
@@ -50,6 +51,7 @@ const translations = {
         noSuggestions: "Không có gợi ý câu trả lời nào được tạo.",
         yourAnswer: "Câu trả lời của bạn:",
         aiSuggestion: "Gợi ý của AI:",
+        answerAnalysis: "Phân tích câu trả lời",
         errorLoading: "Không thể tải bản tóm tắt.",
         backToHome: "Quay về trang chủ",
         tryAnother: "Thử một cuộc phỏng vấn khác",
@@ -70,6 +72,7 @@ const translations = {
         noSuggestions: "No answer suggestions were generated.",
         yourAnswer: "Your Answer:",
         aiSuggestion: "AI's Suggestion:",
+        answerAnalysis: "Answer Analysis",
         errorLoading: "Could not load summary.",
         backToHome: "Back to Home",
         tryAnother: "Try Another Interview",
@@ -275,8 +278,22 @@ export default function SummaryPage() {
                                                 {item.userAnswer}
                                             </blockquote>
                                         </div>
+                                        {item.answerAnalysis && (
+                                            <div>
+                                                <h4 className="font-semibold text-sm text-primary mb-1 flex items-center">
+                                                    <ClipboardCheck className="mr-2 h-4 w-4" />
+                                                    {T.answerAnalysis}
+                                                </h4>
+                                                <blockquote className="text-sm text-foreground/90 border-l-2 border-primary/50 pl-3 py-1 whitespace-pre-line">
+                                                    {item.answerAnalysis}
+                                                </blockquote>
+                                            </div>
+                                        )}
                                         <div>
-                                            <h4 className="font-semibold text-sm text-primary mb-1">{T.aiSuggestion}</h4>
+                                            <h4 className="font-semibold text-sm text-primary mb-1 flex items-center">
+                                                <GraduationCap className="mr-2 h-4 w-4" />
+                                                {T.aiSuggestion}
+                                            </h4>
                                             <blockquote className="text-sm text-foreground/90 border-l-2 border-primary/50 pl-3 py-1 whitespace-pre-line">
                                                 {item.suggestedAnswer}
                                             </blockquote>
