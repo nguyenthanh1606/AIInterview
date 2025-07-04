@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from "react";
@@ -29,22 +30,70 @@ import { useToast } from "@/hooks/use-toast";
 import { extractCvData } from "@/ai/flows/cv-data-extraction";
 import { cn } from "@/lib/utils";
 
-const formSchema = z.object({
-  jobRole: z
-    .string({ required_error: "Vui lòng chọn một vai trò công việc." })
-    .min(1, "Vui lòng chọn một vai trò công việc."),
-  cvFile: z
-    .custom<FileList>()
-    .refine((files) => files?.length > 0, "CV là bắt buộc.")
-    .refine(
-      (files) => files?.[0]?.size <= 5 * 1024 * 1024,
-      `Kích thước tệp tối đa là 5MB.`
-    )
-    .optional(),
-  interviewMode: z.enum(["chat", "voice"], {
-    required_error: "Vui lòng chọn chế độ phỏng vấn.",
-  }),
-});
+const translations = {
+  vi: {
+    jobRoleLabel: "Chọn vai trò công việc",
+    jobRolePlaceholder: "ví dụ: Kỹ sư phần mềm",
+    softwareEngineer: "Kỹ sư phần mềm",
+    productManager: "Quản lý sản phẩm",
+    salesRepresentative: "Đại diện bán hàng",
+    dataScientist: "Nhà khoa học dữ liệu",
+    uxDesigner: "Nhà thiết kế UX/UI",
+    uploadCvLabel: "Tải lên CV (Tùy chọn)",
+    uploadCvDescription: "Tải lên CV của bạn để có trải nghiệm phỏng vấn được cá nhân hóa.",
+    uploadButton: "Nhấn để tải lên",
+    dragAndDrop: "hoặc kéo và thả",
+    fileTypes: "PDF, DOCX, hoặc TXT (TỐI ĐA 5MB)",
+    noFileSelected: "Chưa có tệp nào được chọn",
+    fileSelected: "Tệp đã chọn:",
+    interviewModeLabel: "Chọn chế độ phỏng vấn",
+    chatMode: "Phỏng vấn qua tin nhắn",
+    chatModeDescription: "Nhập câu trả lời của bạn.",
+    voiceMode: "Phỏng vấn qua giọng nói",
+    voiceModeDescription: "Nói câu trả lời của bạn.",
+    micAccessDenied: "Truy cập Microphone bị từ chối",
+    micAccessDescription: "Vui lòng cho phép truy cập microphone trong cài đặt trình duyệt của bạn để tiếp tục với cuộc phỏng vấn bằng giọng nói.",
+    errorTitle: "Lỗi",
+    startError: "Không thể xử lý CV hoặc bắt đầu phỏng vấn. Vui lòng thử lại.",
+    submitButtonLoading: "Đang bắt đầu...",
+    submitButton: "Bắt đầu phỏng vấn",
+    cvRequired: "CV là bắt buộc.",
+    maxFileSize: "Kích thước tệp tối đa là 5MB.",
+    jobRoleRequired: "Vui lòng chọn một vai trò công việc.",
+    interviewModeRequired: "Vui lòng chọn chế độ phỏng vấn.",
+  },
+  en: {
+    jobRoleLabel: "Select a job role",
+    jobRolePlaceholder: "e.g., Software Engineer",
+    softwareEngineer: "Software Engineer",
+    productManager: "Product Manager",
+    salesRepresentative: "Sales Representative",
+    dataScientist: "Data Scientist",
+    uxDesigner: "UX/UI Designer",
+    uploadCvLabel: "Upload CV (Optional)",
+    uploadCvDescription: "Upload your CV for a personalized interview experience.",
+    uploadButton: "Click to upload",
+    dragAndDrop: "or drag and drop",
+    fileTypes: "PDF, DOCX, or TXT (MAX 5MB)",
+    noFileSelected: "No file selected",
+    fileSelected: "Selected file:",
+    interviewModeLabel: "Select interview mode",
+    chatMode: "Chat Interview",
+    chatModeDescription: "Type your answers.",
+    voiceMode: "Voice Interview",
+    voiceModeDescription: "Speak your answers.",
+    micAccessDenied: "Microphone Access Denied",
+    micAccessDescription: "Please allow microphone access in your browser settings to proceed with a voice interview.",
+    errorTitle: "Error",
+    startError: "Could not process CV or start the interview. Please try again.",
+    submitButtonLoading: "Starting Interview...",
+    submitButton: "Start Interview",
+    cvRequired: "CV is required.",
+    maxFileSize: "Maximum file size is 5MB.",
+    jobRoleRequired: "Please select a job role.",
+    interviewModeRequired: "Please select an interview mode.",
+  },
+};
 
 const fileToDataUri = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -56,13 +105,33 @@ const fileToDataUri = (file: File) =>
 
 interface InterviewFormProps {
   onFormSubmit: () => void;
+  language: 'vi' | 'en';
 }
 
-export function InterviewForm({ onFormSubmit }: InterviewFormProps) {
+export function InterviewForm({ onFormSubmit, language }: InterviewFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const T = translations[language];
+
+  const formSchema = z.object({
+    jobRole: z
+      .string({ required_error: T.jobRoleRequired })
+      .min(1, T.jobRoleRequired),
+    cvFile: z
+      .custom<FileList>()
+      .refine((files) => files?.length > 0, T.cvRequired)
+      .refine(
+        (files) => files?.[0]?.size <= 5 * 1024 * 1024,
+        T.maxFileSize
+      )
+      .optional(),
+    interviewMode: z.enum(["chat", "voice"], {
+      required_error: T.interviewModeRequired,
+    }),
+  });
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -81,9 +150,8 @@ export function InterviewForm({ onFormSubmit }: InterviewFormProps) {
         console.error("Microphone permission denied:", err);
         toast({
           variant: "destructive",
-          title: "Truy cập Microphone bị từ chối",
-          description:
-            "Vui lòng cho phép truy cập microphone trong cài đặt trình duyệt của bạn để tiếp tục với cuộc phỏng vấn bằng giọng nói.",
+          title: T.micAccessDenied,
+          description: T.micAccessDescription,
         });
         setIsLoading(false);
         return;
@@ -105,7 +173,7 @@ export function InterviewForm({ onFormSubmit }: InterviewFormProps) {
           jobRole: values.jobRole,
           interviewMode: values.interviewMode,
           cvText,
-          language: "vi",
+          language: language,
         })
       );
 
@@ -115,9 +183,8 @@ export function InterviewForm({ onFormSubmit }: InterviewFormProps) {
       console.error("Failed to start interview:", error);
       toast({
         variant: "destructive",
-        title: "Lỗi",
-        description:
-          "Không thể xử lý CV hoặc bắt đầu phỏng vấn. Vui lòng thử lại.",
+        title: T.errorTitle,
+        description: T.startError,
       });
       setIsLoading(false);
     }
@@ -125,7 +192,7 @@ export function InterviewForm({ onFormSubmit }: InterviewFormProps) {
 
   const cvFile = form.watch("cvFile");
   const fileName =
-    cvFile && cvFile.length > 0 ? cvFile[0].name : "Chưa có tệp nào được chọn";
+    cvFile && cvFile.length > 0 ? cvFile[0].name : T.noFileSelected;
 
   return (
     <Form {...form}>
@@ -135,29 +202,19 @@ export function InterviewForm({ onFormSubmit }: InterviewFormProps) {
           name="jobRole"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="font-bold">
-                Chọn vai trò công việc
-              </FormLabel>
+              <FormLabel className="font-bold">{T.jobRoleLabel}</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="ví dụ: Kỹ sư phần mềm" />
+                    <SelectValue placeholder={T.jobRolePlaceholder} />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="Kỹ sư phần mềm">Kỹ sư phần mềm</SelectItem>
-                  <SelectItem value="Quản lý sản phẩm">
-                    Quản lý sản phẩm
-                  </SelectItem>
-                  <SelectItem value="Đại diện bán hàng">
-                    Đại diện bán hàng
-                  </SelectItem>
-                  <SelectItem value="Nhà khoa học dữ liệu">
-                    Nhà khoa học dữ liệu
-                  </SelectItem>
-                  <SelectItem value="Nhà thiết kế UX/UI">
-                    Nhà thiết kế UX/UI
-                  </SelectItem>
+                  <SelectItem value={translations.en.softwareEngineer}>{T.softwareEngineer}</SelectItem>
+                  <SelectItem value={translations.en.productManager}>{T.productManager}</SelectItem>
+                  <SelectItem value={translations.en.salesRepresentative}>{T.salesRepresentative}</SelectItem>
+                  <SelectItem value={translations.en.dataScientist}>{T.dataScientist}</SelectItem>
+                  <SelectItem value={translations.en.uxDesigner}>{T.uxDesigner}</SelectItem>
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -170,12 +227,8 @@ export function InterviewForm({ onFormSubmit }: InterviewFormProps) {
           name="cvFile"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="font-bold">
-                Tải lên CV (Tùy chọn)
-              </FormLabel>
-              <FormDescription>
-                Tải lên CV của bạn để có trải nghiệm phỏng vấn được cá nhân hóa.
-              </FormDescription>
+              <FormLabel className="font-bold">{T.uploadCvLabel}</FormLabel>
+              <FormDescription>{T.uploadCvDescription}</FormDescription>
               <FormControl>
                 <div
                   className="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted/75 transition-colors"
@@ -183,12 +236,9 @@ export function InterviewForm({ onFormSubmit }: InterviewFormProps) {
                 >
                   <UploadCloud className="w-8 h-8 text-muted-foreground mb-2" />
                   <p className="mb-2 text-sm text-muted-foreground">
-                    <span className="font-semibold">Nhấn để tải lên</span> hoặc
-                    kéo và thả
+                    <span className="font-semibold">{T.uploadButton}</span> {T.dragAndDrop}
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    PDF, DOCX, hoặc TXT (TỐI ĐA 5MB)
-                  </p>
+                  <p className="text-xs text-muted-foreground">{T.fileTypes}</p>
                   <Input
                     type="file"
                     ref={fileInputRef}
@@ -198,9 +248,9 @@ export function InterviewForm({ onFormSubmit }: InterviewFormProps) {
                   />
                 </div>
               </FormControl>
-              {fileName !== "Chưa có tệp nào được chọn" && (
+              {fileName !== T.noFileSelected && (
                 <div className="text-sm text-muted-foreground pt-2">
-                  Tệp đã chọn: {fileName}
+                  {T.fileSelected} {fileName}
                 </div>
               )}
               <FormMessage />
@@ -213,7 +263,7 @@ export function InterviewForm({ onFormSubmit }: InterviewFormProps) {
           name="interviewMode"
           render={({ field }) => (
             <FormItem className="space-y-3">
-              <FormLabel className="font-bold">Chọn chế độ phỏng vấn</FormLabel>
+              <FormLabel className="font-bold">{T.interviewModeLabel}</FormLabel>
               <FormControl>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div
@@ -228,9 +278,9 @@ export function InterviewForm({ onFormSubmit }: InterviewFormProps) {
                     <div className="flex items-center gap-4">
                       <MessageCircle className="h-8 w-8 text-primary" />
                       <div>
-                        <h3 className="font-bold">Phỏng vấn qua tin nhắn</h3>
+                        <h3 className="font-bold">{T.chatMode}</h3>
                         <p className="text-sm text-muted-foreground">
-                          Nhập câu trả lời của bạn.
+                          {T.chatModeDescription}
                         </p>
                       </div>
                     </div>
@@ -247,9 +297,9 @@ export function InterviewForm({ onFormSubmit }: InterviewFormProps) {
                     <div className="flex items-center gap-4">
                       <Mic className="h-8 w-8 text-primary" />
                       <div>
-                        <h3 className="font-bold">Phỏng vấn qua giọng nói</h3>
+                        <h3 className="font-bold">{T.voiceMode}</h3>
                         <p className="text-sm text-muted-foreground">
-                          Nói câu trả lời của bạn.
+                          {T.voiceModeDescription}
                         </p>
                       </div>
                     </div>
@@ -269,10 +319,10 @@ export function InterviewForm({ onFormSubmit }: InterviewFormProps) {
           {isLoading ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Bắt đầu phỏng vấn...
+              {T.submitButtonLoading}
             </>
           ) : (
-            "Bắt đầu phỏng vấn"
+            T.submitButton
           )}
         </Button>
       </form>
