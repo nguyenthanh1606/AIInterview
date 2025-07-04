@@ -10,6 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { generateInterviewSummary } from '@/ai/flows/post-interview-summary';
+import { generateInterviewQuestions } from '@/ai/flows/generate-interview-questions';
 import { textToSpeech } from '@/ai/flows/text-to-speech';
 import { transcribeAudio } from '@/ai/flows/transcribe-audio';
 import { cn } from '@/lib/utils';
@@ -28,14 +29,6 @@ interface InterviewConfig {
   language: 'vi' | 'en';
 }
 
-const MOCK_QUESTIONS = [
-  "Bạn có thể giới thiệu một chút về bản thân không?",
-  "Điểm mạnh lớn nhất của bạn mà bạn sẽ mang lại cho vai trò này là gì?",
-  "Bạn có thể mô tả một trong những điểm yếu lớn nhất của mình và cách bạn đang cải thiện nó không?",
-  "Bạn thấy mình ở đâu trong sự nghiệp trong năm năm tới?",
-  "Tại sao bạn quan tâm đến vị trí này và công ty của chúng tôi?",
-];
-
 export default function InterviewPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -43,18 +36,19 @@ export default function InterviewPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [userInput, setUserInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(true);
   const [isFinishing, setIsFinishing] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [interviewQuestions, setInterviewQuestions] = useState<string[]>([]);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   
   // Voice state
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
-  const [audioSrc, setAudioSrc] = useState<string | null>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
-  const audioPlayerRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     const storedConfig = localStorage.getItem('interviewConfig');
@@ -66,20 +60,48 @@ export default function InterviewPage() {
     setConfig(parsedConfig);
 
     const startInterview = async () => {
+        setIsGeneratingQuestions(true);
         setMessages([
             {
                 role: 'ai',
-                content: `Xin chào! Tôi sẽ là người phỏng vấn bạn hôm nay. Chúng ta đang phỏng vấn cho vị trí ${parsedConfig.jobRole}. Hãy bắt đầu.`,
+                content: `Xin chào! Tôi sẽ là người phỏng vấn bạn hôm nay. Chúng ta đang phỏng vấn cho vị trí ${parsedConfig.jobRole}. Tôi đang chuẩn bị một vài câu hỏi, vui lòng đợi trong giây lát...`,
             },
         ]);
 
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setIsLoading(true);
-        await addAiMessage(MOCK_QUESTIONS[0]);
-        setIsLoading(false);
+        try {
+            const { questions } = await generateInterviewQuestions({ 
+                jobRole: parsedConfig.jobRole, 
+                language: 'Vietnamese' 
+            });
+            if (!questions || questions.length === 0) {
+                throw new Error("Không thể tạo câu hỏi.");
+            }
+            setInterviewQuestions(questions);
+            
+            setMessages([
+                {
+                    role: 'ai',
+                    content: `Xin chào! Tôi sẽ là người phỏng vấn bạn hôm nay. Chúng ta đang phỏng vấn cho vị trí ${parsedConfig.jobRole}. Hãy bắt đầu.`,
+                },
+            ]);
+            
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            await addAiMessage(questions[0]);
+
+        } catch (error) {
+            console.error("Failed to generate questions:", error);
+            toast({
+                variant: "destructive",
+                title: "Lỗi",
+                description: "Không thể tạo câu hỏi phỏng vấn. Vui lòng thử lại.",
+            });
+            router.push('/');
+        } finally {
+            setIsGeneratingQuestions(false);
+        }
     }
     startInterview();
-  }, [router]);
+  }, [router, toast]);
   
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -96,7 +118,12 @@ export default function InterviewPage() {
         try {
             setIsAiSpeaking(true);
             const result = await textToSpeech(content, config.language);
-            setAudioSrc(result.media);
+            audioPlayerRef.current = new Audio(result.media);
+            audioPlayerRef.current.play();
+            audioPlayerRef.current.onended = () => {
+                setIsAiSpeaking(false);
+                audioPlayerRef.current = null;
+            }
         } catch (error) {
             console.error("TTS Error:", error);
             toast({ variant: "destructive", title: "Lỗi âm thanh", description: "Không thể phát âm thanh phỏng vấn." });
@@ -110,9 +137,9 @@ export default function InterviewPage() {
     await new Promise(resolve => setTimeout(resolve, 1500));
     
     const nextIndex = currentQuestionIndex + 1;
-    if (nextIndex < MOCK_QUESTIONS.length) {
+    if (nextIndex < interviewQuestions.length) {
       setCurrentQuestionIndex(nextIndex);
-      await addAiMessage(MOCK_QUESTIONS[nextIndex]);
+      await addAiMessage(interviewQuestions[nextIndex]);
     }
     setIsLoading(false);
   };
@@ -121,7 +148,7 @@ export default function InterviewPage() {
     if (!answer.trim() || isLoading || isFinishing) return;
     setMessages((prev) => [...prev, { role: 'user', content: answer }]);
     setUserInput('');
-    if (currentQuestionIndex < MOCK_QUESTIONS.length - 1) {
+    if (currentQuestionIndex < interviewQuestions.length - 1) {
       await askNextQuestion();
     }
   };
@@ -218,8 +245,9 @@ export default function InterviewPage() {
     );
   }
 
-  const interviewIsOver = currentQuestionIndex >= MOCK_QUESTIONS.length - 1 && !isLoading;
-  const voiceControlsDisabled = isLoading || isFinishing || isAiSpeaking || isTranscribing;
+  const interviewIsOver = !isGeneratingQuestions && currentQuestionIndex >= interviewQuestions.length - 1 && !isLoading;
+  const voiceControlsDisabled = isLoading || isFinishing || isAiSpeaking || isTranscribing || isGeneratingQuestions;
+  const chatControlsDisabled = isLoading || isFinishing || isGeneratingQuestions;
 
   return (
     <div className="flex h-screen flex-col bg-muted/20">
@@ -279,10 +307,10 @@ export default function InterviewPage() {
                 onChange={(e) => setUserInput(e.target.value)}
                 placeholder="Nhập câu trả lời của bạn tại đây..."
                 className="flex-1"
-                disabled={isLoading || isFinishing}
+                disabled={chatControlsDisabled}
                 autoComplete="off"
               />
-              <Button type="submit" size="icon" disabled={!userInput.trim() || isLoading || isFinishing}>
+              <Button type="submit" size="icon" disabled={!userInput.trim() || chatControlsDisabled}>
                 <Send className="h-4 w-4" />
               </Button>
             </form>
@@ -303,12 +331,11 @@ export default function InterviewPage() {
                     </Button>
                 )}
                 <p className="text-xs text-muted-foreground mt-1">
-                    {isRecording ? "Nhấn để dừng ghi âm" : isTranscribing ? "" : isAiSpeaking ? "" : "Nhấn để ghi âm câu trả lời của bạn"}
+                    {isRecording ? "Nhấn để dừng ghi âm" : isTranscribing ? "" : isAiSpeaking ? "" : isGeneratingQuestions ? "Đang tạo câu hỏi..." : "Nhấn để ghi âm câu trả lời của bạn"}
                 </p>
             </div>
           )}
         </div>
-        {audioSrc && <audio ref={audioPlayerRef} src={audioSrc} autoPlay onPlay={() => setIsAiSpeaking(true)} onEnded={() => {setIsAiSpeaking(false); setAudioSrc(null);}} className="hidden" />}
       </footer>
     </div>
   );
