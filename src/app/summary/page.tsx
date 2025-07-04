@@ -2,26 +2,43 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lightbulb, ThumbsUp, ArrowRight, Home } from 'lucide-react';
+import { Lightbulb, ThumbsUp, ArrowRight, Home, TrendingUp } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis, ResponsiveContainer } from 'recharts';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Logo } from '@/components/logo';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 
-interface SummaryOutput {
-  summary: string;
+interface CompetencyRating {
+  competency: string;
+  rating: number;
+  justification: string;
 }
+
+interface SummaryData {
+  summary: string;
+  competencyRatings: CompetencyRating[];
+}
+
+const chartConfig = {
+  rating: {
+    label: "Đánh giá",
+    color: "hsl(var(--primary))",
+  },
+} satisfies ChartConfig;
 
 export default function SummaryPage() {
   const router = useRouter();
-  const [summary, setSummary] = useState<SummaryOutput | null>(null);
+  const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const storedSummary = localStorage.getItem('interviewSummary');
     if (storedSummary) {
       try {
-        setSummary(JSON.parse(storedSummary));
+        setSummaryData(JSON.parse(storedSummary));
       } catch (error) {
         console.error("Failed to parse summary:", error);
         router.replace('/');
@@ -39,9 +56,9 @@ export default function SummaryPage() {
   };
 
   const parsedSummary = React.useMemo(() => {
-    if (!summary?.summary) return { strengths: [], improvements: [] };
+    if (!summaryData?.summary) return { strengths: [], improvements: [] };
     
-    const lines = summary.summary.split('\n').filter(line => line.trim() !== '');
+    const lines = summaryData.summary.split('\n').filter(line => line.trim() !== '');
     let strengths: string[] = [];
     let improvements: string[] = [];
     let currentSection: 'strengths' | 'improvements' | null = null;
@@ -61,20 +78,19 @@ export default function SummaryPage() {
         continue;
       }
       
-      if (currentSection === 'strengths' && line.trim().startsWith('-')) {
+      if (currentSection === 'strengths' && (line.trim().startsWith('-') || line.trim().startsWith('*'))) {
         strengths.push(line.trim().substring(1).trim());
-      } else if (currentSection === 'improvements' && line.trim().startsWith('-')) {
+      } else if (currentSection === 'improvements' && (line.trim().startsWith('-') || line.trim().startsWith('*'))) {
         improvements.push(line.trim().substring(1).trim());
       }
     }
     
-    // Fallback if parsing fails
-    if (strengths.length === 0 && improvements.length === 0 && summary.summary) {
-        return { strengths: [summary.summary], improvements: [] };
+    if (strengths.length === 0 && improvements.length === 0 && summaryData.summary) {
+        return { strengths: [summaryData.summary], improvements: [] };
     }
 
     return { strengths, improvements };
-  }, [summary]);
+  }, [summaryData]);
 
 
   return (
@@ -88,15 +104,50 @@ export default function SummaryPage() {
         <CardContent className="space-y-8">
             {loading ? (
                 <div className="space-y-6">
-                    <Skeleton className="h-8 w-1/3" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-5/6" />
+                    <Skeleton className="h-60 w-full" />
                     <Skeleton className="h-8 w-1/3 mt-4" />
                     <Skeleton className="h-4 w-full" />
                     <Skeleton className="h-4 w-5/6" />
                 </div>
-            ) : summary ? (
+            ) : summaryData ? (
                 <>
+                <div>
+                  <h3 className="flex items-center text-xl font-semibold mb-4 text-primary-foreground/90">
+                      <TrendingUp className="mr-2 h-5 w-5" />
+                      Đánh giá năng lực
+                  </h3>
+                  {summaryData.competencyRatings && summaryData.competencyRatings.length > 0 ? (
+                    <ChartContainer config={chartConfig} className="min-h-[250px] w-full">
+                      <BarChart data={summaryData.competencyRatings} margin={{ top: 20, right: 20, bottom: 5, left: 0 }} accessibilityLayer>
+                          <CartesianGrid vertical={false} />
+                          <XAxis
+                              dataKey="competency"
+                              tickLine={false}
+                              tickMargin={10}
+                              axisLine={false}
+                              tickFormatter={(value) => value.split(' (')[0]}
+                          />
+                          <YAxis domain={[0, 10]} tickCount={6} />
+                          <ChartTooltip
+                              cursor={false}
+                              content={<ChartTooltipContent
+                                  formatter={(value, name, props) => (
+                                      <div className="flex flex-col gap-1 p-2 min-w-[200px] text-left">
+                                          <div className="font-bold">{props.payload.competency}</div>
+                                          <div className="text-sm">Đánh giá: <span className="font-semibold">{value}/10</span></div>
+                                          <p className="text-sm text-muted-foreground max-w-xs">{props.payload.justification}</p>
+                                      </div>
+                                  )}
+                              />}
+                          />
+                          <Bar dataKey="rating" fill="hsl(var(--primary))" radius={8} />
+                      </BarChart>
+                    </ChartContainer>
+                  ) : (
+                    <p className="text-muted-foreground">Không có dữ liệu đánh giá năng lực.</p>
+                  )}
+                </div>
+
                 <div>
                     <h3 className="flex items-center text-xl font-semibold mb-3 text-green-700">
                         <ThumbsUp className="mr-2 h-5 w-5" />
