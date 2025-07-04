@@ -22,7 +22,7 @@ export type CvDataExtractionInput = z.infer<typeof CvDataExtractionInputSchema>;
 
 const CvDataExtractionOutputSchema = z.object({
   name: z.string().describe('The name of the candidate.'),
-  email: z.string().email().describe('The email address of the candidate.'),
+  email: z.string().describe('The email address of the candidate.'),
   phone: z.string().describe('The phone number of the candidate.'),
   skills: z.array(z.string()).describe('A list of skills of the candidate.'),
   experience: z
