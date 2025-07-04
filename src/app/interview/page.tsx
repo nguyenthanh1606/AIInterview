@@ -47,6 +47,7 @@ export default function InterviewPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+  const [audioSrc, setAudioSrc] = useState<string | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
@@ -117,19 +118,8 @@ export default function InterviewPage() {
     setMessages((prev) => [...prev, { role: 'ai', content }]);
     if (config?.interviewMode === 'voice') {
         try {
-            setIsAiSpeaking(true);
             const result = await textToSpeech(content, config.language);
-            // Stop any currently playing audio before starting a new one
-            if (audioPlayerRef.current) {
-                audioPlayerRef.current.pause();
-                audioPlayerRef.current.src = '';
-            }
-            audioPlayerRef.current = new Audio(result.media);
-            audioPlayerRef.current.play();
-            audioPlayerRef.current.onended = () => {
-                setIsAiSpeaking(false);
-                audioPlayerRef.current = null;
-            }
+            setAudioSrc(result.media);
         } catch (error) {
             console.error("TTS Error:", error);
             toast({ variant: "destructive", title: "Lỗi âm thanh", description: "Không thể phát âm thanh phỏng vấn." });
@@ -145,8 +135,7 @@ export default function InterviewPage() {
     setUserInput('');
 
     if (currentQuestionIndex >= interviewQuestions.length - 1) {
-      setIsLoading(false);
-      return; 
+      return;
     }
     
     setIsLoading(true);
@@ -213,11 +202,15 @@ export default function InterviewPage() {
 
   // --- Voice methods ---
   const handleStartRecording = async () => {
+    if (audioSrc) {
+        setAudioSrc(null);
+    }
     if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
         audioPlayerRef.current.src = '';
-        setIsAiSpeaking(false);
     }
+    setIsAiSpeaking(false);
+
 
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         try {
@@ -270,6 +263,19 @@ export default function InterviewPage() {
         audioChunks.current = [];
     }
   };
+  
+  useEffect(() => {
+    if (audioSrc && config?.interviewMode === 'voice') {
+      audioPlayerRef.current = new Audio(audioSrc);
+      audioPlayerRef.current.play();
+      audioPlayerRef.current.onplay = () => setIsAiSpeaking(true);
+      audioPlayerRef.current.onended = () => {
+        setIsAiSpeaking(false);
+        setAudioSrc(null);
+        audioPlayerRef.current = null;
+      }
+    }
+  }, [audioSrc, config?.interviewMode]);
 
   if (!config) {
     return (
@@ -280,7 +286,7 @@ export default function InterviewPage() {
   }
 
   const interviewIsOver = !isGeneratingQuestions && currentQuestionIndex >= interviewQuestions.length - 1 && !isLoading;
-  const voiceControlsDisabled = isLoading || isFinishing || isTranscribing || isGeneratingQuestions;
+  const voiceControlsDisabled = isLoading || isFinishing || isTranscribing || isGeneratingQuestions || isAiSpeaking;
   const chatControlsDisabled = isLoading || isFinishing || isGeneratingQuestions;
 
   return (
@@ -331,7 +337,7 @@ export default function InterviewPage() {
       <footer className="sticky bottom-0 z-10 border-t bg-background p-4">
         <div className="mx-auto max-w-3xl">
           {interviewIsOver && !isFinishing ? (
-             <Button onClick={handleFinishInterview} className="w-full" disabled={isFinishing || voiceControlsDisabled}>
+             <Button onClick={handleFinishInterview} className="w-full" disabled={isFinishing}>
                 {isFinishing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang hoàn thành...</> : 'Hoàn thành & Nhận phản hồi'}
             </Button>
           ) : config.interviewMode === 'chat' ? (
