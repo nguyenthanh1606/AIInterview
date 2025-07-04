@@ -13,6 +13,7 @@ import { generateInterviewSummary } from '@/ai/flows/post-interview-summary';
 import { generateInterviewQuestions } from '@/ai/flows/generate-interview-questions';
 import { textToSpeech } from '@/ai/flows/text-to-speech';
 import { transcribeAudio } from '@/ai/flows/transcribe-audio';
+import { generateConversationalResponse } from '@/ai/flows/generate-conversational-response';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -118,6 +119,11 @@ export default function InterviewPage() {
         try {
             setIsAiSpeaking(true);
             const result = await textToSpeech(content, config.language);
+            // Stop any currently playing audio before starting a new one
+            if (audioPlayerRef.current) {
+                audioPlayerRef.current.pause();
+                audioPlayerRef.current.src = '';
+            }
             audioPlayerRef.current = new Audio(result.media);
             audioPlayerRef.current.play();
             audioPlayerRef.current.onended = () => {
@@ -132,24 +138,46 @@ export default function InterviewPage() {
     }
   };
 
-  const askNextQuestion = async () => {
-    setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const nextIndex = currentQuestionIndex + 1;
-    if (nextIndex < interviewQuestions.length) {
-      setCurrentQuestionIndex(nextIndex);
-      await addAiMessage(interviewQuestions[nextIndex]);
-    }
-    setIsLoading(false);
-  };
-
   const handleUserAnswer = async (answer: string) => {
     if (!answer.trim() || isLoading || isFinishing) return;
+
     setMessages((prev) => [...prev, { role: 'user', content: answer }]);
     setUserInput('');
-    if (currentQuestionIndex < interviewQuestions.length - 1) {
-      await askNextQuestion();
+
+    if (currentQuestionIndex >= interviewQuestions.length - 1) {
+      setIsLoading(false);
+      return; 
+    }
+    
+    setIsLoading(true);
+    const nextIndex = currentQuestionIndex + 1;
+
+    try {
+        if (!config) throw new Error("Không tìm thấy cấu hình phỏng vấn.");
+
+        const response = await generateConversationalResponse({
+            jobRole: config.jobRole,
+            previousQuestion: interviewQuestions[currentQuestionIndex],
+            userAnswer: answer,
+            nextQuestion: interviewQuestions[nextIndex],
+            language: 'Vietnamese',
+        });
+        
+        await addAiMessage(response.aiResponse);
+        setCurrentQuestionIndex(nextIndex);
+
+    } catch (error) {
+        console.error("Failed to generate conversational response:", error);
+        toast({
+            variant: "destructive",
+            title: "Lỗi",
+            description: "Đã xảy ra lỗi khi tạo phản hồi. Chuyển sang câu hỏi tiếp theo.",
+        });
+        // Fallback to just asking the next question directly
+        await addAiMessage(interviewQuestions[nextIndex]);
+        setCurrentQuestionIndex(nextIndex);
+    } finally {
+        setIsLoading(false);
     }
   };
 
@@ -185,6 +213,12 @@ export default function InterviewPage() {
 
   // --- Voice methods ---
   const handleStartRecording = async () => {
+    if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+        audioPlayerRef.current.src = '';
+        setIsAiSpeaking(false);
+    }
+
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -246,7 +280,7 @@ export default function InterviewPage() {
   }
 
   const interviewIsOver = !isGeneratingQuestions && currentQuestionIndex >= interviewQuestions.length - 1 && !isLoading;
-  const voiceControlsDisabled = isLoading || isFinishing || isAiSpeaking || isTranscribing || isGeneratingQuestions;
+  const voiceControlsDisabled = isLoading || isFinishing || isTranscribing || isGeneratingQuestions;
   const chatControlsDisabled = isLoading || isFinishing || isGeneratingQuestions;
 
   return (
@@ -318,7 +352,7 @@ export default function InterviewPage() {
             <div className="flex flex-col items-center gap-2">
                 {isTranscribing ? (
                     <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Đang phiên âm câu trả lời của bạn...</div>
-                ) : isAiSpeaking ? (
+                ) : isAiSpeaking && !isRecording ? (
                     <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Người phỏng vấn đang nói...</div>
                 ) : (
                     <Button 
@@ -331,7 +365,7 @@ export default function InterviewPage() {
                     </Button>
                 )}
                 <p className="text-xs text-muted-foreground mt-1">
-                    {isRecording ? "Nhấn để dừng ghi âm" : isTranscribing ? "" : isAiSpeaking ? "" : isGeneratingQuestions ? "Đang tạo câu hỏi..." : "Nhấn để ghi âm câu trả lời của bạn"}
+                    {isRecording ? "Nhấn để dừng ghi âm" : isTranscribing ? "" : isAiSpeaking ? "Bạn có thể ngắt lời để trả lời" : isGeneratingQuestions ? "Đang tạo câu hỏi..." : "Nhấn để ghi âm câu trả lời của bạn"}
                 </p>
             </div>
           )}
