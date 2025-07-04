@@ -62,6 +62,23 @@ const GenerateInterviewSummaryOutputSchema = z.object({
     .describe(
       "A list of competency ratings based on the candidate's performance."
     ),
+  suggestedAnswers: z
+    .array(
+      z.object({
+        question: z.string().describe('The original interview question.'),
+        userAnswer: z
+          .string()
+          .describe("The user's original answer to the question."),
+        suggestedAnswer: z
+          .string()
+          .describe(
+            'A well-structured, improved sample answer that demonstrates the desired competencies for the role. This should serve as an example for the user.'
+          ),
+      })
+    )
+    .describe(
+      'A list of suggestions for improving answers to specific questions from the interview.'
+    ),
 });
 
 export type GenerateInterviewSummaryOutput = z.infer<
@@ -90,6 +107,7 @@ Based on the interview transcript, the candidate's CV, and the target job role, 
     *   Sự phù hợp với vai trò (Role Fit)
 
     For each competency, provide a numerical rating and a brief justification for your score based on specific examples from the interview.
+3.  **Answer Improvement Suggestions:** For each question the AI asked in the transcript, extract the question and the user's answer. Then, provide a more ideal, well-structured sample answer. This suggested answer should be detailed, professional, and highlight the candidate's skills effectively, serving as a learning example.
 
 Interview Transcript:
 {{{interviewTranscript}}}

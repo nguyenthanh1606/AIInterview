@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lightbulb, ThumbsUp, ArrowRight, Home, TrendingUp } from 'lucide-react';
+import { Lightbulb, ThumbsUp, ArrowRight, Home, TrendingUp, MessageSquareQuote } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, ResponsiveContainer } from 'recharts';
 
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import { Logo } from '@/components/logo';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 interface CompetencyRating {
   competency: string;
@@ -17,9 +18,16 @@ interface CompetencyRating {
   justification: string;
 }
 
+interface SuggestedAnswer {
+    question: string;
+    userAnswer: string;
+    suggestedAnswer: string;
+}
+
 interface SummaryData {
   summary: string;
   competencyRatings: CompetencyRating[];
+  suggestedAnswers: SuggestedAnswer[];
 }
 
 const chartConfig = {
@@ -174,6 +182,41 @@ export default function SummaryPage() {
                         <p className="text-muted-foreground">Không có lĩnh vực cụ thể nào cần cải thiện được xác định.</p>
                     )}
                 </div>
+                
+                <div>
+                    <h3 className="flex items-center text-xl font-semibold mb-3 text-foreground">
+                        <MessageSquareQuote className="mr-2 h-5 w-5" />
+                        Gợi ý cải thiện câu trả lời
+                    </h3>
+                    {summaryData.suggestedAnswers && summaryData.suggestedAnswers.length > 0 ? (
+                        <Accordion type="single" collapsible className="w-full">
+                            {summaryData.suggestedAnswers.map((item, i) => (
+                                <AccordionItem value={`item-${i}`} key={`sa-${i}`}>
+                                    <AccordionTrigger className="text-left font-semibold hover:no-underline text-base">
+                                        {item.question}
+                                    </AccordionTrigger>
+                                    <AccordionContent className="space-y-4 pt-2">
+                                        <div>
+                                            <h4 className="font-semibold text-sm text-muted-foreground mb-1">Câu trả lời của bạn:</h4>
+                                            <blockquote className="text-sm text-foreground/80 italic border-l-2 border-border pl-3 py-1">
+                                                {item.userAnswer}
+                                            </blockquote>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-semibold text-sm text-primary mb-1">Gợi ý của AI:</h4>
+                                            <blockquote className="text-sm text-foreground/90 border-l-2 border-primary/50 pl-3 py-1 whitespace-pre-line">
+                                                {item.suggestedAnswer}
+                                            </blockquote>
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            ))}
+                        </Accordion>
+                    ) : (
+                        <p className="text-muted-foreground">Không có gợi ý câu trả lời nào được tạo.</p>
+                    )}
+                </div>
+
                 </>
             ) : (
                 <p className="text-center text-muted-foreground">Không thể tải bản tóm tắt.</p>
