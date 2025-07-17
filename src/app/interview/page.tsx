@@ -130,7 +130,7 @@ export default function InterviewPage() {
   const [isReviewing, setIsReviewing] = useState(false);
   const [reviewCountdown, setReviewCountdown] = useState(REVIEW_TIME);
   const reviewTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const [audioSrc, setAudioSrc] = useState<string | null>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
 
@@ -230,10 +230,7 @@ export default function InterviewPage() {
     if (config?.interviewMode === 'voice') {
         try {
             const result = await textToSpeech(content, config.language);
-            if (audioPlayerRef.current) {
-                audioPlayerRef.current.src = result.media;
-                audioPlayerRef.current.play();
-            }
+            setAudioSrc(result.media);
         } catch (error) {
             console.error("TTS Error:", error);
             toast({ variant: "destructive", title: T.ttsErrorTitle, description: T.ttsError });
@@ -344,9 +341,7 @@ export default function InterviewPage() {
     if (isRerecord) {
       setIsReviewing(false);
     }
-    if (audioPlayerRef.current) {
-        audioPlayerRef.current.pause();
-    }
+    setAudioSrc(null);
     setIsAiSpeaking(false);
 
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -494,7 +489,7 @@ export default function InterviewPage() {
                     <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {T.aiSpeaking}</div>
                 ) : (
                     <Button 
-                        onClick={() => handleStartRecording(false)} 
+                        onClick={isRecording ? handleStopRecording : () => handleStartRecording(false)}
                         size="icon" 
                         className={cn("w-20 h-20 rounded-full", isRecording && "bg-destructive hover:bg-destructive/90")}
                         disabled={voiceControlsDisabled}
@@ -508,8 +503,17 @@ export default function InterviewPage() {
             </div>
           )}
         </div>
-        {config.interviewMode === 'voice' && (
-          <audio ref={audioPlayerRef} onPlay={() => setIsAiSpeaking(true)} onEnded={() => setIsAiSpeaking(false)} className="hidden" />
+        {config.interviewMode === 'voice' && audioSrc && (
+            <audio 
+                src={audioSrc}
+                autoPlay 
+                onPlay={() => setIsAiSpeaking(true)} 
+                onEnded={() => {
+                    setIsAiSpeaking(false);
+                    setAudioSrc(null);
+                }} 
+                className="hidden" 
+            />
         )}
       </footer>
     </div>
