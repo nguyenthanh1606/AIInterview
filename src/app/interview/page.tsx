@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Send, Loader2, Bot, User, Mic, Square } from 'lucide-react';
+import { Send, Loader2, Bot, User, Mic, Square, RefreshCcw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -63,6 +63,8 @@ const translations = {
         micHintStart: 'Nhấn để ghi âm câu trả lời của bạn',
         micHintInterrupt: 'Bạn có thể ngắt lời để trả lời',
         micHintGenerating: 'Đang tạo câu hỏi...',
+        reviewingAnswer: "Đang chờ, tiếp tục trong {countdown}...",
+        reRecordButton: "Ghi âm lại",
     },
     en: {
         jobRole: 'Role',
@@ -95,6 +97,8 @@ const translations = {
         micHintStart: 'Click to record your answer',
         micHintInterrupt: 'You can interrupt to answer',
         micHintGenerating: 'Generating questions...',
+        reviewingAnswer: "Waiting, continuing in {countdown}...",
+        reRecordButton: "Re-record",
     }
 };
 
@@ -102,6 +106,8 @@ const languageMap = {
     vi: 'Vietnamese',
     en: 'English'
 };
+
+const REVIEW_TIME = 5;
 
 export default function InterviewPage() {
   const router = useRouter();
@@ -121,6 +127,9 @@ export default function InterviewPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [reviewCountdown, setReviewCountdown] = useState(REVIEW_TIME);
+  const reviewTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
@@ -178,6 +187,12 @@ export default function InterviewPage() {
         }
     }
     startInterview();
+
+    return () => {
+        if (reviewTimerRef.current) {
+            clearInterval(reviewTimerRef.current);
+        }
+    }
   }, [router, toast]);
   
   useEffect(() => {
@@ -188,6 +203,27 @@ export default function InterviewPage() {
       });
     }
   }, [messages]);
+
+  useEffect(() => {
+    if (isReviewing) {
+        reviewTimerRef.current = setInterval(() => {
+            setReviewCountdown(prev => prev - 1);
+        }, 1000);
+    } else {
+        if (reviewTimerRef.current) clearInterval(reviewTimerRef.current);
+        setReviewCountdown(REVIEW_TIME);
+    }
+    return () => {
+        if (reviewTimerRef.current) clearInterval(reviewTimerRef.current);
+    }
+  }, [isReviewing]);
+
+  useEffect(() => {
+    if (reviewCountdown <= 0) {
+        setIsReviewing(false);
+        proceedWithNextQuestion();
+    }
+  }, [reviewCountdown]);
 
   const addAiMessage = async (content: string) => {
     setMessages((prev) => [...prev, { role: 'ai', content }]);
@@ -206,32 +242,23 @@ export default function InterviewPage() {
     }
   };
 
-  const handleUserAnswer = async (answer: string) => {
-    if (!answer.trim() || isLoading || isFinishing) return;
-
-    setMessages((prev) => [...prev, { role: 'user', content: answer }]);
-    setUserInput('');
-
+  const proceedWithNextQuestion = async () => {
     if (currentQuestionIndex >= interviewQuestions.length - 1) {
-      // Last question has been answered
-      return;
+        setIsLoading(false);
+        return;
     }
-    
-    setIsLoading(true);
 
-    if (config?.interviewMode === 'voice') {
-        await new Promise(resolve => setTimeout(resolve, 5000));
-    }
-    
+    setIsLoading(true);
     const nextIndex = currentQuestionIndex + 1;
+    const lastUserMessage = messages.findLast(m => m.role === 'user');
 
     try {
-        if (!config) throw new Error(T.configError);
+        if (!config || !lastUserMessage) throw new Error(T.configError);
 
         const response = await generateConversationalResponse({
             jobRole: config.jobRole,
             previousQuestion: interviewQuestions[currentQuestionIndex],
-            userAnswer: answer,
+            userAnswer: lastUserMessage.content,
             nextQuestion: interviewQuestions[nextIndex],
             language: languageMap[config.language],
         });
@@ -246,11 +273,38 @@ export default function InterviewPage() {
             title: T.errorTitle,
             description: T.responseErrorToast,
         });
-        // Fallback to just asking the next question directly
         await addAiMessage(interviewQuestions[nextIndex]);
         setCurrentQuestionIndex(nextIndex);
     } finally {
         setIsLoading(false);
+    }
+  };
+
+  const handleUserAnswer = async (answer: string, isRerecord: boolean = false) => {
+    if (!answer.trim() || isLoading || isFinishing) return;
+    
+    if (isRerecord) {
+      setMessages(prev => {
+        const lastMessage = prev[prev.length - 1];
+        if (lastMessage && lastMessage.role === 'user') {
+          return [...prev.slice(0, -1), { role: 'user', content: answer }];
+        }
+        return [...prev, { role: 'user', content: answer }];
+      });
+    } else {
+      setMessages((prev) => [...prev, { role: 'user', content: answer }]);
+    }
+    
+    setUserInput('');
+
+    if (currentQuestionIndex >= interviewQuestions.length - 1) {
+      return;
+    }
+
+    if (config?.interviewMode === 'voice') {
+        setIsReviewing(true);
+    } else {
+        await proceedWithNextQuestion();
     }
   };
 
@@ -260,6 +314,7 @@ export default function InterviewPage() {
   };
 
   const handleFinishInterview = async () => {
+    setIsReviewing(false);
     setIsFinishing(true);
     toast({ title: T.finishingToastTitle, description: T.finishingToastDescription });
     try {
@@ -285,7 +340,10 @@ export default function InterviewPage() {
   }
 
   // --- Voice methods ---
-  const handleStartRecording = async () => {
+  const handleStartRecording = async (isRerecord: boolean = false) => {
+    if (isRerecord) {
+      setIsReviewing(false);
+    }
     if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
     }
@@ -296,7 +354,7 @@ export default function InterviewPage() {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             mediaRecorder.current = new MediaRecorder(stream);
             mediaRecorder.current.ondataavailable = (event) => audioChunks.current.push(event.data);
-            mediaRecorder.current.onstop = handleTranscription;
+            mediaRecorder.current.onstop = () => handleTranscription(isRerecord);
             audioChunks.current = [];
             mediaRecorder.current.start();
             setIsRecording(true);
@@ -322,7 +380,7 @@ export default function InterviewPage() {
     reader.readAsDataURL(blob);
   });
 
-  const handleTranscription = async () => {
+  const handleTranscription = async (isRerecord: boolean) => {
     if (audioChunks.current.length === 0) return;
     setIsTranscribing(true);
     const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' });
@@ -330,7 +388,7 @@ export default function InterviewPage() {
         const audioDataUri = await blobToDataUri(audioBlob);
         const { transcript } = await transcribeAudio({ audioDataUri });
         if (transcript.trim()) {
-            await handleUserAnswer(transcript);
+            await handleUserAnswer(transcript, isRerecord);
         } else {
              toast({ variant: "destructive", title: T.transcriptionErrorToastTitle, description: T.transcriptionErrorToastDescription1 });
         }
@@ -351,7 +409,7 @@ export default function InterviewPage() {
     );
   }
 
-  const interviewIsOver = !isGeneratingQuestions && currentQuestionIndex >= interviewQuestions.length - 1 && !isLoading;
+  const interviewIsOver = !isGeneratingQuestions && currentQuestionIndex >= interviewQuestions.length - 1 && !isLoading && !isReviewing;
   const voiceControlsDisabled = isLoading || isFinishing || isTranscribing || isGeneratingQuestions || isAiSpeaking;
   const chatControlsDisabled = isLoading || isFinishing || isGeneratingQuestions;
 
@@ -422,13 +480,21 @@ export default function InterviewPage() {
             </form>
           ) : (
             <div className="flex flex-col items-center gap-2">
-                {isTranscribing ? (
+                {isReviewing ? (
+                    <div className="flex items-center gap-4">
+                        <Button onClick={() => handleStartRecording(true)} variant="outline">
+                           <RefreshCcw className="mr-2 h-4 w-4" />
+                           {T.reRecordButton}
+                        </Button>
+                        <p className="text-sm text-muted-foreground font-mono w-[180px] text-center">{T.reviewingAnswer.replace('{countdown}', reviewCountdown.toString())}</p>
+                    </div>
+                ) : isTranscribing ? (
                     <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {T.transcribing}</div>
                 ) : isAiSpeaking && !isRecording ? (
                     <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {T.aiSpeaking}</div>
                 ) : (
                     <Button 
-                        onClick={isRecording ? handleStopRecording : handleStartRecording} 
+                        onClick={() => handleStartRecording(false)} 
                         size="icon" 
                         className={cn("w-20 h-20 rounded-full", isRecording && "bg-destructive hover:bg-destructive/90")}
                         disabled={voiceControlsDisabled}
@@ -436,8 +502,8 @@ export default function InterviewPage() {
                         {isRecording ? <Square className="h-8 w-8" /> : <Mic className="h-8 w-8" />}
                     </Button>
                 )}
-                <p className="text-xs text-muted-foreground mt-1">
-                    {isRecording ? T.micHintStop : isTranscribing ? "" : isAiSpeaking ? T.micHintInterrupt : isGeneratingQuestions ? T.micHintGenerating : T.micHintStart}
+                <p className="text-xs text-muted-foreground mt-1 h-4">
+                    {isRecording ? T.micHintStop : isTranscribing || isReviewing ? "" : isAiSpeaking ? T.micHintInterrupt : isGeneratingQuestions ? T.micHintGenerating : T.micHintStart}
                 </p>
             </div>
           )}
