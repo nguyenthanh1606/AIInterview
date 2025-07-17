@@ -218,6 +218,11 @@ export default function InterviewPage() {
     }
     
     setIsLoading(true);
+
+    if (config?.interviewMode === 'voice') {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+    
     const nextIndex = currentQuestionIndex + 1;
 
     try {
